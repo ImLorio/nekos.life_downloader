@@ -1,54 +1,86 @@
 const Axios = require('axios');
-const fs = require('fs'), Path = require('path');
-const chalk = require('chalk');
+const fs = require('fs'),
+    Path = require('path');
+const chalk = require('chalk'),
+    inquirer = require('inquirer');
+
+const baseApiUrl = "https://api.nekos.dev/api/v3/images/"
 
 main()
 async function main() {
+
+    const urls = await getUserNeed()
+    for (const url of urls) {
+        console.log(`${baseApiUrl}${url}`)
+    }
+    
+}
+
+async function getUserNeed() {
+    const apiList = await getApiList()
+    let questions = await {
+        type: 'checkbox',
+        message: 'Select what you want to download',
+        name: 'wwd',
+        pageSize: 12,
+        choices: []
+    }
+    for (const imagesType in apiList) {
+        for (const imagesTypeFiles in apiList[imagesType]) {
+            questions.choices.push(new inquirer.Separator(chalk.yellow.bold(` = ${imagesType} | ${imagesTypeFiles} = `)))
+            for (const image of apiList[imagesType][imagesTypeFiles]) {
+                await questions.choices.push(`${imagesType}/${imagesTypeFiles === "gif" ? imagesTypeFiles : "img"}/${image}`)
+            }
+        }
+    }
+
+    const answers = await inquirer.prompt([questions]);
+    return answers.wwd
+}
+
+// download()
+async function download() {
     console.log(await getApiList())
     setInterval(async () => {
         imgUrl = await getImageLink('https://api.nekos.dev/api/v3/images/sfw/img/cat')
         if (!imgUrl) return;
         downloadImage(imgUrl)
-    }, 5000);
+    }, 6000);
 }
-
-
-
-// downloadImage()
 
 async function getApiList() {
     const response = await Axios({
-        url: 'https://api.nekos.dev/api/v3/docs/', method: 'GET'
+        url: 'https://api.nekos.dev/api/v3/docs/',
+        method: 'GET'
     });
 
-    let sfw = response.data.data.response.endpoints.images[0].categories.sfw
-    let nsfw = response.data.data.response.endpoints.images[0].categories.nsfw
-    
+    const sfw = response.data.data.response.endpoints.images[0].categories.sfw;
+    const nsfw = response.data.data.response.endpoints.images[0].categories.nsfw;
+
     return {
-        sfw: sfw, 
+        sfw: sfw,
         nsfw: nsfw
-    }
-
+    };
 }
-
 async function getImageLink(apiUrl) {
     if (!apiUrl) return error(`'apiUrl' is not definned in 'getImageLink()'`)
-    // apiUrl = 'https://api.nekos.dev/api/v3/images/sfw/img/cat';
     const response = await Axios({
-        url: apiUrl, method: 'GET'
+        url: apiUrl,
+        method: 'GET'
     });
 
     return response.data.data.response.url;
 }
-
 async function downloadImage(imgUrl, dir) {
     if (!imgUrl) return error(`'imgUrl' is not definned in 'downloadImage()'`)
-    dir = '';
-    const path = Path.resolve(__dirname, dir, 'cat.jpg');
+    if (!dir) dir = 'cat.jpg';
+    const path = Path.resolve(__dirname, dir);
     const stream = fs.createWriteStream(path)
 
     const response = await Axios({
-        url: imgUrl, method: 'GET', responseType: 'stream'
+        url: imgUrl,
+        method: 'GET',
+        responseType: 'stream'
     });
 
     response.data.pipe(stream);
@@ -59,9 +91,9 @@ async function downloadImage(imgUrl, dir) {
     });
 }
 
-const error = (data) => console.log(chalk.red('[Error] ' + data))
+function renameKey(obj, oldKey, newKey) {
+    obj[newKey] = obj[oldKey];
+    delete obj[oldKey];
+}
 
-/*axios.get(`https://api.nekos.dev/api/v3/images/sfw/img/cat`).then(res => {
-    if (res.status === 200) {} else return;
-    console.log('ok')
-});*/
+const error = (data) => console.log(chalk.red('[Error] ' + data))
