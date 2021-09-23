@@ -1,28 +1,14 @@
-const Axios = require('axios');
-const fs = require('fs'),
-    Path = require('path');
-const chalk = require('chalk'),
-    inquirer = require('inquirer');
+const superagent = require('superagent');
+const download = require('image-downloader');
+const fs = require('fs');
+const colors = require('colors');
+const { get } = require('superagent');
 
-const baseApiUrl = "https://api.nekos.dev/api/v3/images/"
-const error = (data) => console.log(chalk.red(`[Error] ${data}`))
-const downloaded = (data) => console.log(chalk.green(`[Downloaded] ${data}`))
-const setTitle = (title) => process.stdout.write(String.fromCharCode(27) + ']0;' + title + String.fromCharCode(7))
-
-async function main() {
-    console.clear()
-    setTitle(`Nekos.life Downloader ~ By github.com/ImLorio`)
-    const urls = await getUserNeed()
-    for (const url of urls) {
-        let apiUrl = `${baseApiUrl}${url}`;
-        setInterval(async () => {
-            let imageLink = await getImageLink(apiUrl)
-            downloadImage(imageLink, url, imageLink.split('/').at(-1))
-            downloaded(`${url}/${imageLink.split('/').at(-1)}`)
-        }, 500);
-    }
+Array.prototype.sample = function(){
+    return this[Math.floor(Math.random()*this.length)];
 }
 
+const baseApiUrl = "https://api.nekos.dev/api/v3/images/"
 async function getUserNeed() {
     const apiList = await getApiList()
     let questions = await {
@@ -41,68 +27,33 @@ async function getUserNeed() {
             }
         }
     }
-
     const answers = await inquirer.prompt([questions]);
     return answers.wwd
 }
 
-async function getApiList() {
-    const response = await Axios({
-        url: 'https://api.nekos.dev/api/v3/docs/',
-        method: 'GET'
-    }).catch(error => console.log(error.response.status));
+const urls = await getUserNeed()
 
-    const sfw = response.data.data.response.endpoints.images[0].categories.sfw;
-    const nsfw = response.data.data.response.endpoints.images[0].categories.nsfw;
+for (const url of urls) getImg(`${baseApiUrl}${url}`)
+async function getImg(url) {
+    let folder = url.split('/')[7]
+    let folder2 = url.split('/')[8]
+    const {
+        body
+    } = await superagent.get(url);
+    if (body.data.status.code != 200) return getImg(url);
 
-    return {
-        sfw: sfw,
-        nsfw: nsfw
-    };
+    if (!fs.existsSync(`./${folder}`)) fs.mkdirSync(`./${folder}`);
+    if (!fs.existsSync(`./${folder}/${folder2}`)) fs.mkdirSync(`./${folder}/${folder2}`);
+    if (fs.existsSync(`./${folder}/${folder2}/${body.data.response.url.split('/')[7]}`)) {
+        console.log(colors.blue(`${colors.yellow(`[INFO]`)} Already exists ! (${folder}/${folder2})`));
+        return getImg(url);;
+    }
+    await download.image({
+        url: body.data.response.url,
+        dest: `${folder}/${folder2}`
+        })
+        .then(out => console.log(colors.gray(`${colors.yellow(`[INFO]`)} ${colors.red(out.filename)} downloaded`)))
+        .catch((err) => console.error(err));
+        
+    getImg(url)
 }
-async function getImageLink(apiUrl) {
-    if (!apiUrl) return error(`'apiUrl' is not defined in 'getImageLink()'`)
-    const response = await Axios({
-        url: apiUrl,
-        method: 'GET'
-    }).catch(error => {
-        if (error.response.status == 500) return;
-        error(`error ${error.response.status} in 'getImageLink()`)
-        return setTimeout(() => {
-            getImageLink(apiUrl)
-        }, 500);;
-    });
-    if (!response) return
-
-    return response.data.data.response.url;
-}
-async function downloadImage(imgUrl, dir, filename) {
-    if (!imgUrl) return error(`'imgUrl' is not defined in 'downloadImage()'`)
-    if (!dir) return error(`'dir' is not defined in 'downloadImage()'`)
-    if (!filename) return error(`'filename' is not defined in 'downloadImage()'`) 
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const path = Path.resolve(__dirname, dir, filename);
-    const stream = fs.createWriteStream(path)
-
-    const response = await Axios({
-        url: imgUrl,
-        method: 'GET',
-        responseType: 'stream'
-    });
-
-    response.data.pipe(stream);
-
-    stream.on('error', async (err) => error(err))
-
-    return new Promise((resolve, reject) => {
-        stream.on('finish', resolve)
-        stream.on('error', reject)
-    });
-}
-
-function renameKey(obj, oldKey, newKey) {
-    obj[newKey] = obj[oldKey];
-    delete obj[oldKey];
-}
-
-main()
